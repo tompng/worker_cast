@@ -3,12 +3,33 @@
 require "bundler/setup"
 require "worker_cast"
 
-# You can add fixtures and/or initialization code here to make experimenting
-# with your gem easier. You can also use a different console, if you like.
+class Thread
+  def self.new &block
+    Thread.start do
+      begin
+        block.call
+      rescue => e
+        p e
+        p e.backtrace
+      end
+    end
+  end
+end
 
-# (If you use this, don't forget to add pry to your Gemfile!)
-# require "pry"
-# Pry.start
 
-require "irb"
-IRB.start(__FILE__)
+SERVERS = {
+  a: 'localhost:12345',
+  b: 'localhost:23456',
+  c: 'localhost:34567',
+}
+
+ WorkerCast.start(SERVERS, ARGV[0].to_sym) do |message, cb|
+   Thread.new do
+     sleep 1
+     cb.call message.upcase
+   end
+   :async
+ end
+
+require "pry"
+Pry.start

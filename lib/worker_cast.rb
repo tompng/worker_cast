@@ -1,6 +1,8 @@
 require "worker_cast/version"
+require 'socket'
+require 'json'
 
-module WorkerCast::Connection
+class WorkerCast::Connection
   def initialize name, ip, port
     @name = name
     @ip = ip
@@ -15,7 +17,7 @@ module WorkerCast::Connection
         sleep 1
       end
     end
-    Thrad.new do
+    Thread.new do
       send_loop
     end
   end
@@ -35,7 +37,7 @@ module WorkerCast::Connection
   def send(message, response_queue = nil)
     unless @socket
       response_queue&.<< nil
-      return nil
+      return false
     end
     if response_queue
       @mutex.synchronize do
@@ -71,24 +73,28 @@ module WorkerCast
   def self.start(servers, self_name, &block)
     self_ip, self_port = servers[self_name].split ':'
     @servers = {}
-    @name = self_name
+    @server_name = self_name
     @block = block
     @ondata_queue = Queue.new
     servers.each do |name, ip_port|
       ip, port = ip_port.split ':'
       ip = 'localhost' if ip == self_ip
-      @servers[name] = Connection.new name, ip, port if name != self_name
+      @servers[name] = Connection.new name, ip, port
     end
     Thread.new { accept_start self_port }
     Thread.new { consume }
   end
 
-  def broadcast message, response: true
+  def self.server_name
+    @server_name
+  end
+
+  def self.broadcast message, response: true
     if response
       name_queues = @servers.map do |name, server|
         queue = Queue.new
         server.send message, queue
-        queue
+        [name, queue]
       end
       name_queues.map { |name, queue| [name, queue.deq] }.to_h
     else
@@ -98,17 +104,19 @@ module WorkerCast
     end
   end
 
-  def send name, message, response: true
+  def self.send name, message, response: true
+    server = @servers[name]
+    raise "server undefined: #{name}" unless server
     if response
       queue = Queue.new
-      @servers[name].send message, queue
+      server.send message, queue
       queue.deq
     else
-      @servers[name].send message
+      server.send message
     end
   end
 
-  def consume
+  def self.consume
     loop do
       message, key, response_queue = @ondata_queue.deq
       respond = lambda do |response|
@@ -127,7 +135,7 @@ module WorkerCast
     end
   end
 
-  def ondata message_key_queue
+  def self.ondata message_key_queue
     @ondata_queue << message_key_queue
   end
 
@@ -135,8 +143,8 @@ module WorkerCast
     response_queue = Queue.new
     Thread.new do
       begin
-        loop do
-          message, key = JSON.parse socket.gets
+        while (data = socket.gets)
+          message, key = JSON.parse data
           ondata [message, key, response_queue]
         end
       ensure
@@ -144,7 +152,7 @@ module WorkerCast
         socket.close
       end
     end
-    Thead.new do
+    Thread.new do
       begin
         while (data = response_queue.deq)
           socket.puts data.to_json

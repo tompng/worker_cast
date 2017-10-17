@@ -22,6 +22,10 @@ class WorkerCast::Connection
     end
   end
 
+  def status
+    !!@socket
+  end
+
   def send_loop
     loop do
       data = @send_queue.deq
@@ -89,30 +93,44 @@ module WorkerCast
     @server_name
   end
 
-  def self.broadcast message, response: true
-    if response
-      name_queues = @servers.map do |name, server|
-        queue = Queue.new
-        server.send message, queue
-        [name, queue]
-      end
-      name_queues.map { |name, queue| [name, queue.deq] }.to_h
+  def self.status_ok?
+    status.values.all?
+  end
+
+  def self.status server_name = nil
+    if server_name
+      server_exist! server_name
+      @servers[server_name].status
     else
-      @servers.map do |name, server|
-        [name, server.send(message)]
-      end.to_h
+      @servers.map { |name, server| [name, server.status] }.to_h
     end
   end
 
+  def self.broadcast(message, servers: @servers.keys, response: true, include_self: true)
+    servers = servers - [server_name] unless include_self
+    servers.zip(_cast(servers, message, response)).to_h
+  end
+
   def self.send name, message, response: true
-    server = @servers[name]
-    raise "server undefined: #{name}" unless server
+    _cast([name], message, response).first
+  end
+
+  def self.server_exist! name
+    raise "undefined server: #{name}" unless @servers.key? name
+  end
+
+  def self._cast names, message, response
+    names.each { |name| server_exist! name }
     if response
-      queue = Queue.new
-      server.send message, queue
-      queue.deq
+      names.map do |name|
+        queue = Queue.new
+        @servers[name].send message, queue
+        queue
+      end.map(&:deq)
     else
-      server.send message
+      names.map do |name|
+        @servers[name].send(message)
+      end
     end
   end
 

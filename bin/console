@@ -25,8 +25,8 @@ SERVERS = {
 
  WorkerCast.start(SERVERS, ARGV[0].to_sym) do |message, cb|
    Thread.new do
-     sleep 1
-     cb.call message.upcase
+     sleep rand
+     cb.call [message.inspect.upcase, WorkerCast.server_name]
    end
    :async
  end

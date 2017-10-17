@@ -1,39 +1,69 @@
 # WorkerCast
 
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/worker_cast`. To experiment with that code, run `bin/console` for an interactive prompt.
-
-TODO: Delete this and the text above, and describe your gem
-
-## Installation
-
-Add this line to your application's Gemfile:
-
 ```ruby
-gem 'worker_cast'
+gem 'worker_cast', github: 'tompng/worker_cast'
 ```
 
-And then execute:
+```ruby
+# Listen
+ServerList = {
+  app1: '10.0.12.34:8000',
+  app2: '10.0.12.34:8001',
+  backend: '10.0.56.78:8000'
+}
 
-    $ bundle
+WorkerCast.start ServerList, :app1 do |data, respond|
+  do_something
+  return response
+  or
+  return :async and call { respond.call response }.asynchronously
+end
+```
 
-Or install it yourself as:
+```ruby
+# Status
 
-    $ gem install worker_cast
+WorkerCast.status
+# => { app1: true, app2: true, backend: false }
 
-## Usage
+WorkerCast.status :app2
+# => true or false
 
-TODO: Write usage instructions here
+WorkerCast.status_ok?
+# => true(all connected) or false(some not connected)
+```
 
-## Development
+```ruby
+# Casting
 
-After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake test` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
+WorkerCast.broadcast data
+# => { app1: 'hi', app2: { 'msg' => 'hello' }, backend: nil(error) }
 
-To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release`, which will create a git tag for the version, push git commits and tags, and push the `.gem` file to [rubygems.org](https://rubygems.org).
+WorkerCast.broadcast data, response: false
+# => { app1: true, app2: true, backend: false }
 
-## Contributing
+WorkerCast.broadcast data, include_self: false
+# => { app2: 'hi', backend: 'hello' }
 
-Bug reports and pull requests are welcome on GitHub at https://github.com/[USERNAME]/worker_cast.
+WorkerCast.broadcast data, servers: [:app2, :backend]
+# => { app2: 'hi', backend: 'hello' }
 
-## License
+WorkerCast.send :app2, data
+# => response or nil(error)
 
-The gem is available as open source under the terms of the [MIT License](http://opensource.org/licenses/MIT).
+WorkerCast.send :app2, data, response: false
+# => true or false(error)
+```
+
+```ruby
+# with unicorn(workers >= 2)
+Servers = {a1: '10.0.0.1:8000', a2: '10.0.0.1:8001', b1: '10.0.0.2:8000', b2: '10.0.0.2:8001'}
+server_group = ENV['SERVER_GROUP']
+server_names = [server_group + '1', server_group + '2']
+after_fork do
+  server_name = server_names.unshift
+  WorkerCast.start Servers, server_name do |data, respond|
+    ...
+  end
+end
+```

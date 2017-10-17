@@ -33,14 +33,14 @@ class WorkerCast::Connection
         @socket.puts data.to_json
       rescue StandardError
         key = data[1]
-        @mutex.synchronize { @waitings.delete(key) << nil } if key
+        @mutex.synchronize { @waitings.delete(key) << nil rescue nil } if key
       end
     end
   end
 
   def send(message, response_queue = nil)
     unless @socket
-      response_queue << nil if response_queue
+      response_queue << nil rescue nil if response_queue
       return false
     end
     if response_queue

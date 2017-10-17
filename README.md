@@ -60,9 +60,11 @@ WorkerCast.send :app2, data, response: false
 Servers = {a1: '10.0.0.1:8000', a2: '10.0.0.1:8001', b1: '10.0.0.2:8000', b2: '10.0.0.2:8001'}
 server_group = ENV['SERVER_GROUP']
 server_names = [server_group + '1', server_group + '2']
+before_fork do
+  $server_name = server_names.unshift
+end
 after_fork do
-  server_name = server_names.unshift
-  WorkerCast.start Servers, server_name do |data, respond|
+  WorkerCast.start Servers, $server_name do |data, respond|
     ...
   end
 end

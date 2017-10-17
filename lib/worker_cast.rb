@@ -40,7 +40,7 @@ class WorkerCast::Connection
 
   def send(message, response_queue = nil)
     unless @socket
-      response_queue&.<< nil
+      response_queue << nil if response_queue
       return false
     end
     if response_queue
